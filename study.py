@@ -30,10 +30,10 @@ if __name__ == '__main__':
 
     standardize = True
     standardize_continuous = True
-    resample = True
+    resample = False
     reproject = False
     lambda_reproject = False
-    run_optim_no_fairness = False
+    run_optim_no_fairness = True
 
     train = pd.read_csv('data/heart_train.csv')
     val = pd.read_csv('data/heart_val.csv')
@@ -89,11 +89,10 @@ if __name__ == '__main__':
             mean_ = np.mean(train_processed[continuos_features], axis=0)
             std_ = np.std(train_processed[continuos_features], ddof=1, axis=0)
 
-            train_processed[continuos_features] = (
+            train_processed = (
                 train_processed[continuos_features] - mean_) / std_
-            val_processed[continuos_features] = (
-                val_processed[continuos_features] - mean_) / std_
-            test_processed[continuos_features] = (
+            val_processed = (val_processed[continuos_features] - mean_) / std_
+            test_processed = (
                 test_processed[continuos_features] - mean_) / std_
 
         else:
