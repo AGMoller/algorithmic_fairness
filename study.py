@@ -148,6 +148,16 @@ if __name__ == '__main__':
     if run_optim_no_fairness:
         print(study.best_trial)
 
+        # Get the best parameters
+        best_params = study.best_trial.params
+        model = DecisionTreeClassifier(**best_params)
+        model.fit(train_processed, y_train)
+
+        val_pred = model.predict(val_processed)
+        val_pred_proba = model.predict_proba(val_processed)
+        test_pred = model.predict(test_processed)
+        test_pred_proba = model.predict_proba(test_processed)
+
     else:
         fig = optuna.visualization.plot_pareto_front(
             study, target_names=["EO", "F1"])
