@@ -33,7 +33,7 @@ def reproject_features(
     # go through all protected attributes and calculate their contribution to
     # the reprojection to the hyperplane
     debiased_data = list()
-    for j in tqdm(range(debiased_nonprotect.shape[1])):
+    for j in range(debiased_nonprotect.shape[1]):
         for index in range(0, data.shape[0], batch_size):
             start, stop = index, min(index + batch_size, data.shape[0])
             debiased_nonprotect[start:stop,

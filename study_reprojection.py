@@ -15,6 +15,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
+from sqlalchemy import desc
+from tqdm import tqdm
 
 from metrics_eo import equailized_odds
 from objective import Objective
@@ -108,35 +110,12 @@ if __name__ == '__main__':
 
     y_train, y_val, y_test = train_target, val_target, test_target
 
-    if standardize:
-        if standardize_continuous:
-            # Scale continuous variables
-            mean_ = np.mean(train_processed[continuos_features], axis=0)
-            std_ = np.std(train_processed[continuos_features], ddof=1, axis=0)
+    mean_ = np.mean(train_processed, axis=0)
+    std_ = np.std(train_processed, ddof=1, axis=0)
 
-            train_processed = (
-                train_processed[continuos_features] - mean_) / std_
-            val_processed = (val_processed[continuos_features] - mean_) / std_
-            test_processed = (
-                test_processed[continuos_features] - mean_) / std_
-
-        else:
-            # Standardize all variables
-            mean_ = np.mean(train_processed, axis=0)
-            std_ = np.std(train_processed, ddof=1, axis=0)
-
-            train_processed = (train_processed - mean_) / std_
-            val_processed = (val_processed - mean_) / std_
-            test_processed = (test_processed - mean_) / std_
-
-    sampler = optuna.samplers.TPESampler()
-
-    study = optuna.create_study(directions=["minimize", "maximize"],
-                                sampler=sampler,
-                                pruner=optuna.pruners.MedianPruner(
-                                    n_startup_trials=2, n_warmup_steps=5,
-                                    interval_steps=3),
-                                )
+    train_processed = (train_processed - mean_) / std_
+    val_processed = (val_processed - mean_) / std_
+    test_processed = (test_processed - mean_) / std_
 
     # Do random oversampling to make class distribution even
     if resample:
@@ -148,83 +127,56 @@ if __name__ == '__main__':
     nonprotected_cols = [
         f for f in train_processed if f not in protected_cols]
 
-    if lambda_reproject:
+    lambda_values = np.linspace(0, 1, 25)
+    # Run optimization
 
-        lambda_values = np.linspace(0, 1, 10)
-        # Run optimization
+    param_grid = {
+        'criterion': 'gini',
+        'max_depth': 46,
+        'min_samples_split': 0.0031163168319514006,
+        'min_samples_leaf': 0.002909135794829023}
 
-        param_grid = {
-            "criterion": "gini",
-            "max_depth": 50,
-            "min_samples_split": 1e-5,
-            "min_samples_leaf": 1e-5,
-        }
+    results_f1 = {}
+    results_eo = {}
+    results_class = {
+        'TPR_White': [],
+        'FPR_White': [],
+        'TPR_Black': [],
+        'FPR_Black': []}
 
-        results_f1 = {}
-        results_eo = {}
+    for i in tqdm(lambda_values, desc='Lambda'):
 
-        for i in lambda_values:
-
-            # basic reprojection
-            train_processed_r = reproject_features_w_regul(
-                train_processed,
-                protected_cols=protected_cols,
-                nonprotected_cols=nonprotected_cols,
-                lambda_=i)
-
-            val_processed_r = reproject_features_w_regul(
-                val_processed,
-                protected_cols=protected_cols,
-                nonprotected_cols=nonprotected_cols,
-                lambda_=i)
-
-            test_processed_r = reproject_features_w_regul(
-                test_processed,
-                protected_cols=protected_cols,
-                nonprotected_cols=nonprotected_cols,
-                lambda_=i)
-
-            whitebox_model = DecisionTreeClassifier(
-                **param_grid, random_state=42).fit(train_processed_r, y_train)
-
-            # Evaluate model
-            y_pred = whitebox_model.predict(val_processed_r)
-
-            results_f1[i] = metrics.f1_score(
-                y_val, y_pred, labels=['Yes'], pos_label="Yes")
-            results_eo[i] = equailized_odds(y_pred, val_race, y_val)[0]
-
-    else:
-
-        print('Hello now im here!')
         # basic reprojection
-        train_processed_r = reproject_features(
+        train_processed_r = reproject_features_w_regul(
             train_processed,
             protected_cols=protected_cols,
-            nonprotected_cols=nonprotected_cols)
+            nonprotected_cols=nonprotected_cols,
+            lambda_=i)
 
-        val_processed_r = reproject_features(
+        val_processed_r = reproject_features_w_regul(
             val_processed,
             protected_cols=protected_cols,
-            nonprotected_cols=nonprotected_cols)
+            nonprotected_cols=nonprotected_cols,
+            lambda_=i)
 
-        test_processed_r = reproject_features(
+        test_processed_r = reproject_features_w_regul(
             test_processed,
             protected_cols=protected_cols,
-            nonprotected_cols=nonprotected_cols)
+            nonprotected_cols=nonprotected_cols,
+            lambda_=i)
 
-        # Define objective
-        objective = Objective(
-            train_processed_r,
-            val_processed_r,
-            y_train,
-            y_val,
-            val_race,
-            equailized_odds,
-            run_optim_no_fairness=run_optim_no_fairness)
+        whitebox_model = DecisionTreeClassifier(
+            **param_grid, random_state=42).fit(train_processed_r, y_train)
 
-        study.optimize(objective, n_trials=100, n_jobs=-1,)
+        # Evaluate model
+        y_pred = whitebox_model.predict(val_processed_r)
 
-        fig = optuna.visualization.plot_pareto_front(
-            study, target_names=["EO", "F1"])
-        fig.show()
+        results_f1[i] = metrics.f1_score(
+            y_val, y_pred, labels=['Yes'], pos_label="Yes")
+        results_eo[i] = equailized_odds(y_pred, val_race, y_val)[0]
+        all_res = equailized_odds(y_pred, val_race, y_val)[1]
+        results_class["TPR_White"].append(all_res["Yes"]['White'])
+        results_class["FPR_White"].append(all_res["No"]['White'])
+        results_class["TPR_Black"].append(all_res["Yes"]['Black'])
+        results_class["FPR_Black"].append(all_res["No"]['Black'])
+    a = 1
