@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import List
 import scipy
+from tqdm import tqdm
 
 
 def reproject_features(
@@ -27,13 +28,16 @@ def reproject_features(
     # crease an orthonormal basis
     base_protect: np.ndarray = scipy.linalg.orth(protect)
 
+    batch_size = 1000
+
     # go through all protected attributes and calculate their contribution to
     # the reprojection to the hyperplane
-    for j in range(debiased_nonprotect.shape[1]):
-        debiased_nonprotect[:,
-                            j] -= base_protect @ base_protect.T @ nonprotect[:,
-                                                                             j]
-        print('fuuckk')
+    debiased_data = list()
+    for j in tqdm(range(debiased_nonprotect.shape[1])):
+        for index in range(0, data.shape[0], batch_size):
+            start, stop = index, min(index + batch_size, data.shape[0])
+            debiased_nonprotect[start:stop,
+                                j] -= base_protect[start:stop] @ base_protect[start:stop].T @ nonprotect[start:stop, j]
     return debiased_nonprotect
 
 

@@ -20,10 +20,6 @@ from metrics_eo import equailized_odds
 from objective import Objective
 from reprojections import reproject_features_w_regul, reproject_features
 
-np.seterr(all="ignore")
-
-warnings.filterwarnings('ignore')
-
 
 def data_preprocessing(data: pd.DataFrame, categorical_features:
                        List[str], continuos_features: List[str],
@@ -157,6 +153,16 @@ if __name__ == '__main__':
         lambda_values = np.linspace(0, 1, 10)
         # Run optimization
 
+        param_grid = {
+            "criterion": "gini",
+            "max_depth": 50,
+            "min_samples_split": 1e-5,
+            "min_samples_leaf": 1e-5,
+        }
+
+        results_f1 = {}
+        results_eo = {}
+
         for i in lambda_values:
 
             # basic reprojection
@@ -178,28 +184,15 @@ if __name__ == '__main__':
                 nonprotected_cols=nonprotected_cols,
                 lambda_=i)
 
-            # Define objective
-            objective = Objective(
-                train_processed_r,
-                val_processed_r,
-                y_train,
-                y_val,
-                val_race,
-                equailized_odds,
-                run_optim_no_fairness=run_optim_no_fairness)
+            whitebox_model = DecisionTreeClassifier(
+                **param_grid, random_state=42).fit(train_processed_r, y_train)
 
-            study.optimize(objective, n_trials=100,
-                           verbose=False,
-                           n_jobs=-1,
-                           )
+            # Evaluate model
+            y_pred = whitebox_model.predict(val_processed_r)
 
-            # plot
-            fig = optuna.visualization.plot_pareto_front(
-                study, target_names=["EO", "F1"])
-
-            fig.update_layout(
-                title=f"Pareto Front Plot, lambda: {i}")
-            fig.show()
+            results_f1[i] = metrics.f1_score(
+                y_val, y_pred, labels=['Yes'], pos_label="Yes")
+            results_eo[i] = equailized_odds(y_pred, val_race, y_val)[0]
 
     else:
 
@@ -230,9 +223,7 @@ if __name__ == '__main__':
             equailized_odds,
             run_optim_no_fairness=run_optim_no_fairness)
 
-        study.optimize(objective, n_trials=100,
-                       verbose=False,
-                       n_jobs=-1,)
+        study.optimize(objective, n_trials=100, n_jobs=-1,)
 
         fig = optuna.visualization.plot_pareto_front(
             study, target_names=["EO", "F1"])
