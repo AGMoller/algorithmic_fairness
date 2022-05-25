@@ -29,77 +29,82 @@ def check_binaries(*arrays):
         message = "Input arrays should only contain 0s and/or 1s."
         raise ValueError(message)
 
+    
+def perf_measure(y_actual:np.ndarray, y_hat:np.ndarray):
+    tp = 0
+    fp = 0
+    tn = 0
+    fn = 0
 
-def tp_rate(y_true, y_pred) -> float:
-    """
-    True positive rate.
-    Parameters
-    ----------
-    y_true : 1d array-like of binaries
-        Ground truth (correct) target values.
-    y_pred : 1d array-like of binaries
-        Estimated targets as returned by a classifier.
-    """
-    check_lengths(y_true, y_pred)
-    check_binaries(y_true, y_pred)
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    if all(y_true == 0):
-        return np.nan
+    for i in range(len(y_hat)): 
+        if y_actual[i]==y_hat[i]==1:
+            tp += 1
+        if y_hat[i]==1 and y_actual[i]!=y_hat[i]:
+            fp += 1
+        if y_actual[i]==y_hat[i]==0:
+            tn += 1
+        if y_hat[i]==0 and y_actual[i]!=y_hat[i]:
+            fn += 1
+            
+    tp = tp / (tp + fn)
+    fp = fp / (tn + fp)
+    tn = tn / (tn + fp)
+    fn = fn / (tp + fn)
 
-    rate = (y_true @ y_pred) / (y_true @ y_true)
-    return rate
+    return tp, fp, tn, fn
 
 
-def fp_rate(y_true, y_pred) -> float:
-    """
-    False positive rate.
-    Parameters
-    ----------
-    y_true : 1d array-like of binaries
-        Ground truth (correct) target values.
-    y_pred : 1d array-like of binaries
-        Estimated targets as returned by a classifier.
-    """
-    check_lengths(y_true, y_pred)
-    check_binaries(y_true, y_pred)
-    y_false = 1 - np.array(y_true)
-    y_pred = np.array(y_pred)
-    if all(y_false == 0):
-        return np.nan
+def perf_measure(y_actual:np.ndarray, y_hat:np.ndarray):
+    tp = 0
+    fp = 0
+    tn = 0
+    fn = 0
 
-    rate = (y_false @ (y_pred)) / (y_false @ y_false)
-    return rate
+    for i in range(len(y_hat)): 
+        if y_actual[i]==y_hat[i]==1:
+            tp += 1
+        if y_hat[i]==1 and y_actual[i]!=y_hat[i]:
+            fp += 1
+        if y_actual[i]==y_hat[i]==0:
+            tn += 1
+        if y_hat[i]==0 and y_actual[i]!=y_hat[i]:
+            fn += 1
+            
+    tp = tp / (tp + fn)
+    fp = fp / (tn + fp)
+    tn = tn / (tn + fp)
+    fn = fn / (tp + fn)
 
+    return tp, fp, tn, fn
 
 def classification_report(y_true, y_pred, A) -> str:
     """
-    String showing the true positive rate and false
-    positive rate for each group.
+    String showing the true positive, false
+    positive, true negatve and false negative rate 
+    for each group.
     Parameters
     ----------
-    y_true : 1d array-like of binaries
+    y_true : 1d array of binaries
         Ground truth (correct) target values.
-    y_pred : 1d array-like of binaries
+    y_pred : 1d array of binaries
         Estimated targets as returned by a classifier.
-    A: 1d array like
+    groups: 1d array
         Labels for the different groups.
     """
     check_lengths(y_true, y_pred, A)
     check_binaries(y_true, y_pred)
     groups = np.unique(A)
-    header = "{:<30}{:^6}{:^6}".format("A", "TPR", "FPR")
-    row_fmt = "{:<30}{:^6.2f}{:^6.2f}"
+    header = "{:<30}{:^6}{:^6}{:^6}{:^6}".format("A", "TPR", "FPR", "TNR", "FNR")
+    row_fmt = "{:<30}{:^6.2f}{:^6.2f}{:^6.2f}{:^6.2f}"
     lines = [header, "-" * len(header)]
-    for g in groups:
-        y_true_g = y_true[A == g]
-        y_pred_g = y_pred[A == g]
-        tpr_g = tp_rate(y_true_g, y_pred_g)
-        fpr_g = fp_rate(y_true_g, y_pred_g)
-        lines.append(row_fmt.format(g, tpr_g, fpr_g))
+    for group in groups:
+        y_true_g = y_true[A == group]
+        y_pred_g = y_pred[A == group]
+        tp, fp, tn, fn = perf_measure(y_true_g, y_pred_g)
+        lines.append(row_fmt.format(group, tp, fp, tn, fn))
 
-    tpr = tp_rate(y_true, y_pred)
-    fpr = fp_rate(y_true, y_pred)
-    lines.append(row_fmt.format("All", tpr, fpr))
+    tp, fp, tn, fn = perf_measure(y_true, y_pred)
+    lines.append(row_fmt.format("All", tp, fp, tn, fn))
     report = "\n".join(lines)
+    
     return report
