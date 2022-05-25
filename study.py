@@ -162,3 +162,5 @@ if __name__ == '__main__':
         fig = optuna.visualization.plot_pareto_front(
             study, target_names=["EO", "F1"])
         fig.show()
+
+        a = 1
